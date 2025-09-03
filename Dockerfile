@@ -25,11 +25,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code
 COPY . .
 
-# Expose the port Streamlit runs on
-EXPOSE 1000
-
 # Health check
-HEALTHCHECK CMD curl --fail http://localhost:1000/_stcore/health || exit 1
+HEALTHCHECK CMD curl --fail http://localhost:${PORT}/_stcore/health || exit 1
+
 
 # Run the application
-CMD ["streamlit", "run", "main.py", "--server.port=1000", "--server.address=0.0.0.0", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
+EXPOSE 10000
+
+CMD ["streamlit", "run", "main.py", \
+     "--server.port=${PORT}", \
+     "--server.address=0.0.0.0", \
+     "--server.enableCORS=false", \
+     "--server.enableXsrfProtection=false"]
