@@ -32,8 +32,8 @@ HEALTHCHECK CMD curl --fail http://localhost:${PORT}/_stcore/health || exit 1
 # Run the application
 EXPOSE 10000
 
-CMD ["streamlit", "run", "main.py", \
-     "--server.port=${PORT}", \
-     "--server.address=0.0.0.0", \
-     "--server.enableCORS=false", \
-     "--server.enableXsrfProtection=false"]
+CMD streamlit run main.py \
+    --server.port=$PORT \
+    --server.address=0.0.0.0 \
+    --server.enableCORS=false \
+    --server.enableXsrfProtection=false
