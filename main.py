@@ -195,9 +195,9 @@ def render_optimization_sidebar():
                     for ticker in assets.keys():
                         st.session_state.asset_selections[ticker] = False
                     st.rerun()
-    
-    st.markdown("---")
-    
+            
+            st.markdown("---")
+            
             # Individual asset checkboxes
             for ticker, name in assets.items():
                 current_state = st.session_state.asset_selections.get(ticker, False)

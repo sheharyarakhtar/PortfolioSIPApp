@@ -294,7 +294,7 @@ class ExcelExportManager:
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=row, column=col, value=header)
             cell.style = "header"
-        row += 1
+            row += 1
             
         for strategy_name, metrics in performance_summary.items():
             volatility = metrics.get('Volatility', 0)
@@ -320,7 +320,7 @@ class ExcelExportManager:
             for cell in col:
                 try:
                     if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
+                            max_length = len(str(cell.value))
                 except:
                     pass
             adjusted_width = min(max_length + 2, 25)
@@ -661,7 +661,7 @@ class ExcelExportManager:
                                 ws.cell(row=row, column=2, value=value).style = "currency"
                                 ws.cell(row=row, column=3, value=contribution).style = "currency"
                                 ws.cell(row=row, column=4, value=cumulative_contributions).style = "currency"
-                                row += 1
+        row += 1
         
         # Auto-adjust column widths
         for col in ws.columns:
@@ -670,7 +670,7 @@ class ExcelExportManager:
             for cell in col:
                 try:
                     if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
+                            max_length = len(str(cell.value))
                 except:
                     pass
             adjusted_width = min(max_length + 2, 20)
