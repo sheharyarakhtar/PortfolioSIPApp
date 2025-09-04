@@ -906,83 +906,55 @@ class MPTInterface:
     def render_export_options(analysis_results: Dict):
         """Render export options for analysis results."""
         
-        st.subheader("📥 Export Results")
+        st.subheader("📥 Export Comprehensive Report")
         
-        col1, col2 = st.columns(2)
+        st.markdown("""
+        **📋 Excel Report includes:**
+        - Executive Summary with key insights
+        - Strategy Performance Comparison
+        - Risk Analysis & Metrics
+        - Portfolio Composition Analysis
+        - Asset Correlation Matrix
+        - Portfolio Growth Timeline
+        - Monthly Returns Analysis
+        """)
         
-        with col1:
-            if st.button("📊 Export Performance Summary (CSV)", use_container_width=True):
-                MPTInterface._export_performance_csv(analysis_results)
-        
+        col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("📈 Export Detailed Analysis (Excel)", use_container_width=True):
-                MPTInterface._export_detailed_excel(analysis_results)
+            if st.button("📋 Download Comprehensive Excel Report", use_container_width=True, type="primary"):
+                MPTInterface._export_enhanced_excel(analysis_results)
     
     @staticmethod
-    def _export_performance_csv(analysis_results: Dict):
-        """Export performance summary as CSV."""
-        
-        performance_summary = analysis_results['performance_summary']
-        
-        # Create DataFrame
-        data = []
-        for strategy, metrics in performance_summary.items():
-            if not pd.isna(metrics['XIRR']):
-                data.append({
-                    'Strategy': strategy,
-                    'Annual_Return_XIRR': metrics['XIRR'],
-                    'Volatility': metrics['Volatility'],
-                    'Sharpe_Ratio': metrics['Sharpe Ratio'],
-                    'Max_Drawdown': metrics['Max Drawdown'],
-                    'Final_Value': metrics['Final Value'],
-                    'Total_Contributions': metrics['Total Contributions']
-                })
-        
-        if data:
-            df = pd.DataFrame(data)
-            csv = df.to_csv(index=False)
-            
-            st.download_button(
-                label="Download CSV",
-                data=csv,
-                file_name="portfolio_performance_summary.csv",
-                mime="text/csv"
-            )
-            st.success("✅ Performance summary ready for download!")
-        else:
-            st.error("No data available for export.")
-    
-    @staticmethod
-    def _export_detailed_excel(analysis_results: Dict):
-        """Export detailed analysis as Excel."""
+    def _export_enhanced_excel(analysis_results: Dict):
+        """Export comprehensive Excel analysis report."""
         
         try:
             excel_manager = ExcelExportManager()
             
-            # Create a simplified financial summary for export
-            config = analysis_results['config']
-            financial_summary = {
-                'monthly_investment': config['sip_amount'],
-                'selected_assets': config['tickers'],
-                'analysis_date': pd.Timestamp.now().strftime('%Y-%m-%d')
-            }
+            # Get SIP amount from config
+            config = analysis_results.get('config', {})
+            sip_amount = config.get('sip_amount', 0)
             
             file_data, filename, mime_type = excel_manager.create_comprehensive_report(
                 analysis_results=analysis_results,
-                financial_summary=financial_summary,
-                optimal_allocation=None,  # Could be enhanced to include actual weights
-                sip_amount=config['sip_amount']
+                sip_amount=sip_amount
             )
             
             st.download_button(
-                label="Download Excel Report",
+                label="📋 Download Comprehensive Excel Report",
                 data=file_data,
                 file_name=filename,
-                mime=mime_type
+                mime=mime_type,
+                help="Download detailed portfolio analysis with multiple sheets",
+                use_container_width=True
             )
-            st.success("✅ Detailed Excel report ready for download!")
+            
+            st.success("✅ Excel report generated successfully! The report contains 7 comprehensive analysis sheets.")
             
         except Exception as e:
-            st.error(f"Error creating Excel report: {str(e)}")
-            # Fallback to CSV
-            MPTInterface._export_performance_csv(analysis_results)
+            st.error(f"Error creating Excel export: {str(e)}")
+            
+            # Show error details in expander for debugging
+            with st.expander("🔍 Error Details"):
+                import traceback
+                st.code(traceback.format_exc())

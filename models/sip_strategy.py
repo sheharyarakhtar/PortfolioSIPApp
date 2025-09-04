@@ -296,10 +296,35 @@ class SIPStrategyAnalyzer:
         # Forward fill portfolio values to handle non-SIP dates
         portfolio_values = portfolio_values.ffill().fillna(0)
         
+        # Calculate final portfolio weights for Excel export
+        final_weights = None
+        final_allocation = None
+        
+        if len(shares_held) > 0 and portfolio_values.iloc[-1] > 0:
+            # Calculate final weights based on last portfolio composition
+            final_value = portfolio_values.iloc[-1]
+            last_date = portfolio_values.index[-1]
+            
+            # Calculate weight of each asset in final portfolio
+            asset_values = []
+            for j, ticker in enumerate(self.available_tickers):
+                if ticker in data.columns:
+                    asset_value = shares_held[j] * data.loc[last_date, ticker]
+                    asset_values.append(asset_value)
+                else:
+                    asset_values.append(0)
+            
+            total_asset_value = sum(asset_values)
+            if total_asset_value > 0:
+                final_weights = [val / total_asset_value for val in asset_values]
+                final_allocation = dict(zip(self.available_tickers, final_weights))
+        
         return {
             'portfolio_values': portfolio_values,
             'monthly_contributions': monthly_contributions,
-            'strategy_name': strategy_name
+            'strategy_name': strategy_name,
+            'final_weights': final_weights,
+            'final_allocation': final_allocation
         }
     
     def calculate_performance_metrics(self, portfolio_values: pd.Series, 
