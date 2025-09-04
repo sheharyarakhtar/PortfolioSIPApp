@@ -30,7 +30,6 @@ Thumbs.db
 *.ipynb
 
 # Database files
-*.db
 *.sqlite
 *.sqlite3
 
@@ -52,7 +51,6 @@ tmp/
 
 # Data files (if you want to keep them local)
 data/
-*.csv
 *.xlsx
 *.json
 
