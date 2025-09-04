@@ -44,11 +44,10 @@ def main():
         }
     )
     
-    # Google Analytics Configuration
+    # Google Analytics Configuration - inject early via components.html for proper head placement
     GA_MEASUREMENT_ID = "G-L83CT8YSDN"
     
-    # Inject Google Analytics directly into the main DOM
-    st.markdown(f"""
+    GA_JS = f"""
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
     <script>
@@ -57,12 +56,22 @@ def main():
       gtag('js', new Date());
       gtag('config', '{GA_MEASUREMENT_ID}');
     </script>
-    """, unsafe_allow_html=True)
+    """
     
-    # Inject custom meta tags for social media sharing
+    # Inject Google Analytics at the top of the app for early loading
+    components.html(GA_JS, height=0, width=0)
+    
+    # NOTE: Open Graph meta tags for social media previews
+    # The following JS injection won't work for social media crawlers (LinkedIn, Twitter, etc.)
+    # because they scrape raw HTML before JS execution. For proper social previews, you need to:
+    # 1. Edit the base HTML template served by Streamlit/Render
+    # 2. Add static meta tags in the <head> section
+    # 3. Ensure /static/preview.png exists and is served correctly
+    
+    # This JS is kept for browsers that might benefit from dynamic OG tags
     st.markdown("""
     <script>
-    // Add Open Graph meta tags dynamically
+    // Add Open Graph meta tags dynamically (limited effectiveness for social crawlers)
     if (!document.querySelector('meta[property="og:title"]')) {
         var ogTitle = document.createElement('meta');
         ogTitle.setAttribute('property', 'og:title');
@@ -120,8 +129,8 @@ def main():
         label_visibility="collapsed"
     )
     
-    # Update active tab in session state
-    if "🎯 Portfolio Optimization" in selected_tab:
+    # Update active tab in session state - using exact comparison for robustness
+    if selected_tab == "🎯 Portfolio Optimization":
         st.session_state.active_tab = 'optimization'
     else:
         st.session_state.active_tab = 'composition'
