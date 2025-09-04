@@ -4,16 +4,15 @@ services:
   mpt-app:
     build: .
     ports:
-      - "1000:1000"
+      - "10000:10000"
     environment:
-      - STREAMLIT_SERVER_PORT=1000
-      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - PORT=10000
     volumes:
       # Optional: Mount for development
       # - .:/app
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:1000/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:10000/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
