@@ -35,6 +35,18 @@ def main():
     Build efficient portfolios that maximize returns for a given level of risk.
     """)
     
+    # Feedback link
+    col1, col2, col3 = st.columns([1, 4, 1])
+    with col3:
+        st.markdown("""
+        <div style='text-align: center; padding: 10px; background-color: #1f77b4; color: #fff; border-radius: 5px; margin: 10px 0;'>
+            💬 <strong>Help us improve!</strong> 
+            <a href='https://forms.gle/tMWEMegM1uen7GQk9' target='_blank' style='color: #fff; text-decoration: underline; font-weight: bold;'>
+                📝 Share Your Feedback
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
+    
     # Tab selection using radio buttons for better control
     st.markdown("### Choose Your Analysis Type:")
     
@@ -120,7 +132,7 @@ def render_optimization_sidebar():
                     for ticker in assets.keys():
                         st.session_state.asset_selections[ticker] = False
                     st.rerun()
-            
+    
             st.markdown("---")
             
             # Individual asset checkboxes
@@ -238,6 +250,17 @@ def render_optimization_sidebar():
         key="opt_period",
         help="Historical period for backtesting"
     )
+    
+    # Feedback section in sidebar
+    st.markdown("---")
+    st.markdown("### 💬 Feedback")
+    st.markdown("""
+    <div style='text-align: center; padding: 8px; background-color: #e8f4f8; border-radius: 5px;'>
+        <a href='https://forms.gle/tMWEMegM1uen7GQk9' target='_blank' style='color: #1f77b4; text-decoration: none;'>
+            📝 Share your feedback & suggestions
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_composition_sidebar():
     """Render sidebar for portfolio composition analysis."""
@@ -346,6 +369,17 @@ def render_composition_sidebar():
     else:
         st.info("All available tickers are already selected!")
     
+    # Feedback section in composition sidebar
+    st.markdown("---")
+    st.markdown("### 💬 Feedback")
+    st.markdown("""
+    <div style='text-align: center; padding: 8px; background-color: #e8f4f8; border-radius: 5px;'>
+        <a href='https://forms.google.com/your-feedback-form-id' target='_blank' style='color: #1f77b4; text-decoration: none;'>
+            📝 Share your feedback & suggestions
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Note: Strategy selection moved to main content area for better UX
 
 def get_asset_categories():
@@ -418,7 +452,7 @@ def render_portfolio_optimization_content():
     }
     years_back = period_options.get(selected_period, 3)
     if selected_period == "Maximum Available":
-                    start_date = datetime(2015, 1, 1)
+        start_date = datetime(2015, 1, 1)
     else:
         start_date = end_date - timedelta(days=years_back * 365)
     
@@ -461,7 +495,7 @@ def render_portfolio_optimization_content():
         
         with col1:
             st.metric("Monthly Investment", f"${investment_amount:,}")
-            
+        
         with col2:
             st.metric("Selected Assets", len(selected_assets))
         
@@ -818,6 +852,39 @@ def display_analysis_results():
     
     st.markdown("---")
     MPTInterface.render_export_options(analysis_results)
+    
+    # Feedback section after results
+    # st.markdown("---")
+    # st.subheader("💬 We Value Your Feedback!")
+    
+    # col1, col2, col3 = st.columns([1, 1, 1])
+    
+    # with col1:
+    #     if st.button("📝 Share Feedback", use_container_width=True, type="secondary"):
+    #         st.markdown("""
+    #         <script>
+    #         window.open('https://forms.google.com/your-feedback-form-id', '_blank');
+    #         </script>
+    #         """, unsafe_allow_html=True)
+    #         st.info("🚀 Feedback form opened in new tab!")
+    
+    # with col2:
+    #     if st.button("⭐ Rate This Tool", use_container_width=True, type="secondary"):
+    #         st.markdown("""
+    #         <script>
+    #         window.open('https://forms.google.com/your-rating-form-id', '_blank');
+    #         </script>
+    #         """, unsafe_allow_html=True)
+    #         st.info("⭐ Rating form opened in new tab!")
+    
+    # with col3:
+    #     if st.button("🐛 Report Issue", use_container_width=True, type="secondary"):
+    #         st.markdown("""
+    #         <script>
+    #         window.open('https://github.com/your-repo/issues/new', '_blank');
+    #         </script>
+    #         """, unsafe_allow_html=True)
+    #         st.info("🐛 GitHub issues opened in new tab!")
 
 if __name__ == "__main__":
     main()

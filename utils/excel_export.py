@@ -270,7 +270,7 @@ class ExcelExportManager:
             ws.cell(row=row, column=6, value=metrics.get('Volatility', 0)).style = "percentage"
             ws.cell(row=row, column=7, value=metrics.get('Sharpe Ratio', 0)).style = "data"
             ws.cell(row=row, column=8, value=metrics.get('Max Drawdown', 0)).style = "percentage"
-            row += 1
+        row += 1
         
         # Auto-adjust column widths
         self._auto_adjust_columns(ws)
@@ -320,7 +320,7 @@ class ExcelExportManager:
             for cell in col:
                 try:
                     if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
+                        max_length = len(str(cell.value))
                 except:
                     pass
             adjusted_width = min(max_length + 2, 25)
@@ -537,7 +537,7 @@ class ExcelExportManager:
                 ws.cell(row=row, column=2, value=strategy_name).style = "data"
                 ws.cell(row=row, column=3, value=xirr).style = "percentage"
                 ws.cell(row=row, column=4, value=grade).style = "data"
-                row += 1
+        row += 1
     
     def _create_correlation_matrix_sheet(self, analysis_results):
         """Create asset correlation matrix sheet."""
@@ -670,7 +670,7 @@ class ExcelExportManager:
             for cell in col:
                 try:
                     if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
+                        max_length = len(str(cell.value))
                 except:
                     pass
             adjusted_width = min(max_length + 2, 20)
