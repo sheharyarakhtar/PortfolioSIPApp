@@ -542,16 +542,19 @@ class SIPStrategyAnalyzer:
                 
                 # Get S&P 500 price for this date
                 if date in sp500_data.index:
-                    price = sp500_data.loc[date]
+                    price_val = sp500_data.loc[date]
+                    price = float(price_val.iloc[0] if hasattr(price_val, 'iloc') else price_val)
                 else:
                     # Find closest available price
                     available_dates = sp500_data.index[sp500_data.index <= date]
                     if len(available_dates) > 0:
-                        price = sp500_data.loc[available_dates[-1]]
+                        price_val = sp500_data.loc[available_dates[-1]]
+                        price = float(price_val.iloc[0] if hasattr(price_val, 'iloc') else price_val)
                     else:
                         available_dates = sp500_data.index[sp500_data.index > date]
                         if len(available_dates) > 0:
-                            price = sp500_data.loc[available_dates[0]]
+                            price_val = sp500_data.loc[available_dates[0]]
+                            price = float(price_val.iloc[0] if hasattr(price_val, 'iloc') else price_val)
                         else:
                             continue
                 
@@ -560,20 +563,24 @@ class SIPStrategyAnalyzer:
             
             # Calculate portfolio value
             if date in sp500_data.index:
-                current_price = sp500_data.loc[date]
+                price_val = sp500_data.loc[date]
+                current_price = float(price_val.iloc[0] if hasattr(price_val, 'iloc') else price_val)
             else:
                 # Find closest available price
                 available_dates = sp500_data.index[sp500_data.index <= date]
                 if len(available_dates) > 0:
-                    current_price = sp500_data.loc[available_dates[-1]]
+                    price_val = sp500_data.loc[available_dates[-1]]
+                    current_price = float(price_val.iloc[0] if hasattr(price_val, 'iloc') else price_val)
                 else:
                     available_dates = sp500_data.index[sp500_data.index > date]
                     if len(available_dates) > 0:
-                        current_price = sp500_data.loc[available_dates[0]]
+                        price_val = sp500_data.loc[available_dates[0]]
+                        current_price = float(price_val.iloc[0] if hasattr(price_val, 'iloc') else price_val)
                     else:
-                        current_price = sp500_data.iloc[0] if len(sp500_data) > 0 else 1000
+                        fallback_val = sp500_data.iloc[0] if len(sp500_data) > 0 else 1000.0
+                        current_price = float(fallback_val.iloc[0] if hasattr(fallback_val, 'iloc') else fallback_val)
             
-            portfolio_values[date] = shares_held * current_price
+            portfolio_values[date] = float(shares_held * current_price)
         
         # Forward fill portfolio values to handle non-SIP dates
         portfolio_values = portfolio_values.ffill().fillna(0)

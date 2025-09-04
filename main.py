@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 from models.sip_strategy import SIPStrategyAnalyzer
 from ui.mpt_components import MPTInterface
 from utils.excel_export import ExcelExportManager
+from utils.database_client import local_data_client
 
 def main():
     """Main application function for MPT portfolio optimization."""
@@ -108,20 +109,20 @@ def render_optimization_sidebar():
             # Select All / Deselect All buttons
             col1, col2 = st.columns([1, 1])
             
-    with col1:
+            with col1:
                 if st.button(f"✅ Select All", key=f"opt_select_all_{category}"):
                     for ticker in assets.keys():
                         st.session_state.asset_selections[ticker] = True
                     st.rerun()
             
-    with col2:
+            with col2:
                 if st.button(f"❌ Deselect All", key=f"opt_deselect_all_{category}"):
                     for ticker in assets.keys():
                         st.session_state.asset_selections[ticker] = False
                     st.rerun()
-    
-    st.markdown("---")
-    
+            
+            st.markdown("---")
+            
             # Individual asset checkboxes
             for ticker, name in assets.items():
                 current_state = st.session_state.asset_selections.get(ticker, False)
@@ -129,6 +130,58 @@ def render_optimization_sidebar():
                     st.session_state.asset_selections[ticker] = True
                 else:
                     st.session_state.asset_selections[ticker] = False
+    
+    # Custom ticker search and selection
+    st.subheader("🔍 Add Custom Tickers")
+    
+    # Get all available tickers from CSV
+    all_available_tickers = local_data_client.get_available_tickers()
+    
+    # Get currently selected tickers
+    currently_selected = [ticker for ticker, selected in st.session_state.asset_selections.items() if selected]
+    
+    # Filter out already selected tickers
+    available_for_selection = [ticker for ticker in all_available_tickers if ticker not in currently_selected]
+    
+    if available_for_selection:
+        # Search and select dropdown
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            selected_ticker = st.selectbox(
+                "Search and select a ticker:",
+                options=[""] + available_for_selection,
+                index=0,
+                key="custom_ticker_select",
+                help=f"Choose from {len(available_for_selection)} available tickers"
+            )
+        
+        with col2:
+            if st.button("➕ Add", disabled=not selected_ticker, key="add_custom_ticker"):
+                if selected_ticker:
+                    st.session_state.asset_selections[selected_ticker] = True
+                    st.rerun()
+        
+        # Show currently selected custom tickers (not in predefined categories)
+        asset_categories = get_asset_categories()
+        predefined_tickers = set()
+        for category_tickers in asset_categories.values():
+            predefined_tickers.update(category_tickers.keys())
+        
+        custom_selected = [ticker for ticker in currently_selected if ticker not in predefined_tickers]
+        
+        if custom_selected:
+            st.markdown("**Selected Custom Tickers:**")
+            for ticker in custom_selected:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"• {ticker}")
+                with col2:
+                    if st.button("❌", key=f"remove_{ticker}", help=f"Remove {ticker}"):
+                        st.session_state.asset_selections[ticker] = False
+                        st.rerun()
+    else:
+        st.info("All available tickers are already selected!")
     
     # Optimization settings
     st.subheader("⚙️ Optimization Settings")
@@ -241,6 +294,58 @@ def render_composition_sidebar():
                 else:
                     st.session_state.composition_asset_selections[ticker] = False
     
+    # Custom ticker search and selection for composition analysis
+    st.subheader("🔍 Add Custom Tickers")
+    
+    # Get all available tickers from CSV
+    all_available_tickers = local_data_client.get_available_tickers()
+    
+    # Get currently selected tickers for composition
+    currently_selected = [ticker for ticker, selected in st.session_state.composition_asset_selections.items() if selected]
+    
+    # Filter out already selected tickers
+    available_for_selection = [ticker for ticker in all_available_tickers if ticker not in currently_selected]
+    
+    if available_for_selection:
+        # Search and select dropdown
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            selected_ticker = st.selectbox(
+                "Search and select a ticker:",
+                options=[""] + available_for_selection,
+                index=0,
+                key="comp_custom_ticker_select",
+                help=f"Choose from {len(available_for_selection)} available tickers"
+            )
+        
+        with col2:
+            if st.button("➕ Add", disabled=not selected_ticker, key="add_comp_custom_ticker"):
+                if selected_ticker:
+                    st.session_state.composition_asset_selections[selected_ticker] = True
+                    st.rerun()
+        
+        # Show currently selected custom tickers (not in predefined categories)
+        asset_categories = get_asset_categories()
+        predefined_tickers = set()
+        for category_tickers in asset_categories.values():
+            predefined_tickers.update(category_tickers.keys())
+        
+        custom_selected = [ticker for ticker in currently_selected if ticker not in predefined_tickers]
+        
+        if custom_selected:
+            st.markdown("**Selected Custom Tickers:**")
+            for ticker in custom_selected:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"• {ticker}")
+                with col2:
+                    if st.button("❌", key=f"comp_remove_{ticker}", help=f"Remove {ticker}"):
+                        st.session_state.composition_asset_selections[ticker] = False
+                        st.rerun()
+    else:
+        st.info("All available tickers are already selected!")
+    
     # Note: Strategy selection moved to main content area for better UX
 
 def get_asset_categories():
@@ -306,7 +411,7 @@ def render_portfolio_optimization_content():
     selected_period = st.session_state.get('opt_period', "Last 3 Years")
     
     # Calculate dates
-                end_date = datetime.now()
+    end_date = datetime.now()
     period_options = {
         "Last 1 Year": 1, "Last 2 Years": 2, "Last 3 Years": 3,
         "Last 5 Years": 5, "Last 10 Years": 10, "Maximum Available": 15
@@ -340,6 +445,10 @@ def render_portfolio_optimization_content():
             run_portfolio_analysis(demo_config, start_date.strftime('%Y-%m-%d'), 
                                  end_date.strftime('%Y-%m-%d'), demo_methods, 
                                  demo_frequencies, "Both Strategies (Recommended)", is_demo=True)
+        
+        # Display results if available (for both demo and regular analysis)
+        if st.session_state.get('analysis_results'):
+            display_analysis_results()
     
     elif not optimization_methods or not rebalancing_frequencies:
         st.warning("⚠️ Please select at least one optimization method and rebalancing frequency.")
@@ -353,7 +462,7 @@ def render_portfolio_optimization_content():
         with col1:
             st.metric("Monthly Investment", f"${investment_amount:,}")
             
-            with col2:
+        with col2:
             st.metric("Selected Assets", len(selected_assets))
         
         with col3:
@@ -371,8 +480,8 @@ def render_portfolio_optimization_content():
         # Run analysis button
         st.markdown("---")
         
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
             if st.button("🚀 Optimize Portfolio", type="primary", use_container_width=True):
                 config = {
                     'tickers': selected_assets,
@@ -388,8 +497,8 @@ def render_portfolio_optimization_content():
                     rebalancing_frequencies,
                     rebalancing_strategy
                     )
-            
-            # Display results if available
+        
+        # Display results if available (for both demo and regular analysis)
         if st.session_state.get('analysis_results'):
             display_analysis_results()
 
@@ -620,7 +729,21 @@ def run_portfolio_analysis(config: Dict, start_date: str, end_date: str,
             st.success("✅ Portfolio optimization completed!")
             
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
             st.error(f"❌ Error during analysis: {str(e)}")
+            
+            # Show more detailed error info in expander for debugging
+            with st.expander("🔍 Error Details (for debugging)"):
+                st.code(error_details)
+                
+            # Provide helpful suggestions based on error type
+            if "array element with a sequence" in str(e):
+                st.info("💡 **Tip:** This error often occurs with data formatting issues. Try selecting different assets or time periods.")
+            elif "KeyError" in str(e):
+                st.info("💡 **Tip:** This might be a configuration issue. Try refreshing the page and selecting assets again.")
+            elif "optimization" in str(e).lower():
+                st.info("💡 **Tip:** Optimization failed. Try selecting more diverse assets or a different time period.")
 
 def build_strategies(optimization_methods: List[str], rebalancing_frequencies: List[str], 
                    rebalancing_strategy: str = "Both Strategies (Recommended)") -> List[Dict]:
