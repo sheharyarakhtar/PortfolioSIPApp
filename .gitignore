@@ -53,6 +53,12 @@ tmp/
 *.xlsx
 *.json
 
+# Keep static files for deployment
+!static/
+!static/index.html
+!static/preview.png
+!.streamlit/
+
 # Build artifacts
 build/
 dist/

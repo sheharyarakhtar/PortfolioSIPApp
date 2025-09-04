@@ -18,13 +18,58 @@ from utils.database_client import local_data_client
 def main():
     """Main application function for MPT portfolio optimization."""
     
-    # Page configuration
+    # Page configuration with enhanced metadata
     st.set_page_config(
-        page_title="MPT Portfolio Optimizer",
+        page_title="MPT Portfolio Optimizer - Modern Portfolio Theory Tool",
         page_icon="📊",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="expanded",
+        menu_items={
+            'Get Help': 'https://forms.gle/tMWEMegM1uen7GQk9',
+            'Report a bug': 'https://forms.gle/tMWEMegM1uen7GQk9',
+            'About': """
+            # MPT Portfolio Optimizer
+            
+            Professional portfolio optimization using Modern Portfolio Theory.
+            
+            **Features:**
+            - Advanced mathematical optimization models
+            - Systematic Investment Plan (SIP) backtesting
+            - Risk analysis and performance metrics
+            - Interactive charts and comprehensive reports
+            
+            Built for investors who want data-driven portfolio decisions.
+            """
+        }
     )
+    
+    # Inject custom meta tags for social media sharing
+    st.markdown("""
+    <script>
+    // Add Open Graph meta tags dynamically
+    if (!document.querySelector('meta[property="og:title"]')) {
+        var ogTitle = document.createElement('meta');
+        ogTitle.setAttribute('property', 'og:title');
+        ogTitle.content = 'MPT Portfolio Optimizer - Modern Portfolio Theory Tool';
+        document.head.appendChild(ogTitle);
+        
+        var ogDesc = document.createElement('meta');
+        ogDesc.setAttribute('property', 'og:description');
+        ogDesc.content = 'Professional portfolio optimization using Modern Portfolio Theory. Backtest strategies, optimize allocations, and maximize returns.';
+        document.head.appendChild(ogDesc);
+        
+        var ogUrl = document.createElement('meta');
+        ogUrl.setAttribute('property', 'og:url');
+        ogUrl.content = window.location.href;
+        document.head.appendChild(ogUrl);
+        
+        var ogImage = document.createElement('meta');
+        ogImage.setAttribute('property', 'og:image');
+        ogImage.content = window.location.origin + '/static/preview.png';
+        document.head.appendChild(ogImage);
+    }
+    </script>
+    """, unsafe_allow_html=True)
     
     # Header
     st.title("📊 Modern Portfolio Theory Optimizer")
@@ -374,7 +419,7 @@ def render_composition_sidebar():
     st.markdown("### 💬 Feedback")
     st.markdown("""
     <div style='text-align: center; padding: 8px; background-color: #e8f4f8; border-radius: 5px;'>
-        <a href='https://forms.google.com/your-feedback-form-id' target='_blank' style='color: #1f77b4; text-decoration: none;'>
+        <a href='https://forms.gle/tMWEMegM1uen7GQk9' target='_blank' style='color: #1f77b4; text-decoration: none;'>
             📝 Share your feedback & suggestions
         </a>
     </div>
