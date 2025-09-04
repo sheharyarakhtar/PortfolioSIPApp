@@ -1,9 +1,8 @@
 """
-Enhanced SIP Strategy module for portfolio optimization app.
-Integrates the Enhanced SIP Strategy with the MPT portfolio app architecture.
+Modern Portfolio Theory (MPT) Optimization Engine.
+Professional portfolio optimization using mathematical models and systematic investment strategies.
 """
 
-import yfinance as yf
 import pandas as pd
 import numpy as np
 import cvxpy as cp
@@ -15,8 +14,11 @@ from typing import Dict, List, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import local database client
+from utils.database_client import local_data_client
+
 class SIPStrategyAnalyzer:
-    """Enhanced SIP Strategy analyzer integrated with portfolio app"""
+    """Professional MPT-based portfolio optimizer with systematic investment capabilities"""
     
     def __init__(self, config: Dict):
         self.config = config
@@ -26,82 +28,13 @@ class SIPStrategyAnalyzer:
         
     def validate_tickers(self, tickers: List[str]) -> Tuple[List[str], List[str]]:
         """Validate ticker availability and return valid/invalid lists."""
-        import yfinance as yf
-        
-        valid_tickers = []
-        invalid_tickers = []
-        
-        print(f"🔍 Validating {len(tickers)} tickers...")
-        
-        for ticker in tickers:
-            try:
-                # Try to get basic info for the ticker
-                ticker_obj = yf.Ticker(ticker)
-                info = ticker_obj.info
-                
-                # Check if we got meaningful data
-                if info and ('regularMarketPrice' in info or 'previousClose' in info or 'currentPrice' in info):
-                    valid_tickers.append(ticker)
-                    print(f"✅ {ticker} - Valid")
-                else:
-                    # Try downloading a small sample to double-check
-                    test_data = ticker_obj.history(period="5d")
-                    if not test_data.empty and len(test_data) > 0:
-                        valid_tickers.append(ticker)
-                        print(f"✅ {ticker} - Valid (via history)")
-                    else:
-                        invalid_tickers.append(ticker)
-                        print(f"❌ {ticker} - No data available")
-                        
-            except Exception as e:
-                invalid_tickers.append(ticker)
-                print(f"❌ {ticker} - Error: {str(e)[:50]}...")
-        
-        print(f"📊 Validation complete: {len(valid_tickers)} valid, {len(invalid_tickers)} invalid")
-        return valid_tickers, invalid_tickers
+        return local_data_client.validate_tickers(tickers)
     
     def download_data(self, start_date: str, end_date: str, use_cache: bool = True) -> pd.DataFrame:
-        """Download and clean market data with caching support"""
-        
-        # Create cache key
-        cache_key = f"sip_data_{start_date}_{end_date}_{'_'.join(sorted(self.available_tickers))}"
-        
-        # Try to use cached data if available and requested
-        if use_cache and hasattr(self, '_data_cache') and cache_key in self._data_cache:
-            cached_data, cached_start, cached_end = self._data_cache[cache_key]
-            
-            # Check if cached data covers the requested period
-            if (pd.to_datetime(cached_start) <= pd.to_datetime(start_date) and 
-                pd.to_datetime(cached_end) >= pd.to_datetime(end_date)):
-                
-                print(f"📋 Using cached data from {cached_start} to {cached_end}")
-                
-                # Return subset of cached data for requested period
-                mask = (cached_data.index >= start_date) & (cached_data.index <= end_date)
-                return cached_data.loc[mask]
-        
-        try:
-            print(f"📊 Downloading fresh data from {start_date} to {end_date}...")
-            data = yf.download(self.available_tickers, start=start_date, end=end_date, progress=False)["Close"]
-            
-            if data.empty:
-                raise ValueError("No data downloaded")
-            
-            # Handle missing data with forward fill
-            data = data.ffill().bfill()
-            data = data.dropna(how='all')
-            
-            # Cache the data
-            if not hasattr(self, '_data_cache'):
-                self._data_cache = {}
-            
-            self._data_cache[cache_key] = (data, start_date, end_date)
-            print(f"💾 Data cached for future use")
-            
-            return data
-            
-        except Exception as e:
-            raise Exception(f"Error downloading data: {e}")
+        """Download and clean market data from local database"""
+        return local_data_client.get_historical_data_with_cache(
+            self.available_tickers, start_date, end_date, use_cache
+        )
     
     def detect_market_regime(self, returns: pd.DataFrame, lookback_days: int = 252) -> str:
         """Simple market regime detection based on volatility and returns"""
@@ -140,18 +73,39 @@ class SIPStrategyAnalyzer:
             Sigma = np.array(returns_data.cov()) * 252
             n = len(mu)
             
+            # Ensure we have valid data
+            if np.any(np.isnan(mu)) or np.any(np.isnan(Sigma)):
+                return None
+            
             # Add regularization to covariance matrix
-            Sigma += np.eye(n) * 1e-6
+            Sigma += np.eye(n) * 1e-4  # Increased regularization
             
             w = cp.Variable(n)
             
             if method == "max_sharpe":
-                objective = cp.Minimize(cp.quad_form(w, Sigma))
-                constraints = [
-                    (mu - params["rf"]) @ w == 1,
-                    w >= params["min_weight"],
-                    w <= params["max_weight"]
-                ]
+                # Fixed Max Sharpe formulation
+                excess_returns = mu - params["rf"]
+                
+                # Check if we have positive excess returns
+                if np.all(excess_returns <= 0):
+                    # If all excess returns are negative, fall back to min variance
+                    objective = cp.Minimize(cp.quad_form(w, Sigma))
+                    constraints = [
+                        cp.sum(w) == 1,
+                        w >= params["min_weight"],
+                        w <= params["max_weight"]
+                    ]
+                else:
+                    # Standard Max Sharpe formulation with auxiliary variable
+                    kappa = cp.Variable()
+                    objective = cp.Minimize(cp.quad_form(w, Sigma))
+                    constraints = [
+                        excess_returns @ w == kappa,
+                        kappa >= 0.001,  # Ensure positive excess return
+                        w >= params["min_weight"] * kappa,
+                        w <= params["max_weight"] * kappa,
+                        cp.sum(w) >= 0.001  # Ensure non-trivial solution
+                    ]
             else:  # min_variance
                 objective = cp.Minimize(cp.quad_form(w, Sigma))
                 constraints = [
@@ -161,17 +115,43 @@ class SIPStrategyAnalyzer:
                 ]
             
             prob = cp.Problem(objective, constraints)
-            prob.solve(solver=cp.OSQP, verbose=False)
             
-            if w.value is not None and prob.status == 'optimal':
-                if method == "max_sharpe":
-                    weights = w.value / np.sum(w.value)
-                else:
-                    weights = w.value
-                return weights
+            # Try multiple solvers
+            solvers_to_try = [cp.OSQP, cp.ECOS, cp.SCS]
+            
+            for solver in solvers_to_try:
+                try:
+                    prob.solve(solver=solver, verbose=False)
+                    if prob.status == 'optimal' and w.value is not None:
+                        weights = np.array(w.value).flatten()  # Ensure it's a 1D array
+                        if np.sum(weights) > 0:
+                            weights = weights / np.sum(weights)
+                        
+                        # Ensure weights are valid
+                        if np.all(weights >= 0) and np.abs(np.sum(weights) - 1.0) < 0.01:
+                            return weights
+                        break
+                except:
+                    continue
+            
+            # If Max Sharpe fails, try Min Variance as fallback
+            if method == "max_sharpe":
+                w_fallback = cp.Variable(n)
+                objective_fallback = cp.Minimize(cp.quad_form(w_fallback, Sigma))
+                constraints_fallback = [
+                    cp.sum(w_fallback) == 1,
+                    w_fallback >= params["min_weight"],
+                    w_fallback <= params["max_weight"]
+                ]
+                
+                prob_fallback = cp.Problem(objective_fallback, constraints_fallback)
+                prob_fallback.solve(solver=cp.OSQP, verbose=False)
+                
+                if prob_fallback.status == 'optimal' and w_fallback.value is not None:
+                    return w_fallback.value
             
         except Exception as e:
-            print(f"Optimization failed: {e}")
+            print(f"Optimization error: {e}")
         
         return None
     
@@ -536,10 +516,14 @@ class SIPStrategyAnalyzer:
         if 'VOO' in data.columns:
             sp500_data = data['VOO'].dropna()
         else:
-            # Fallback to downloading S&P 500 index
+            # Fallback to getting S&P 500 proxy from database
             try:
-                sp500_data = yf.download("^GSPC", start=data.index[0], end=data.index[-1], progress=False)["Close"]
-                sp500_data = sp500_data.ffill().bfill().dropna()
+                start_date = data.index[0].strftime('%Y-%m-%d')
+                end_date = data.index[-1].strftime('%Y-%m-%d')
+                sp500_data = local_data_client.get_sp500_data(start_date, end_date)
+                if sp500_data.empty:
+                    # Last resort - use first column of data
+                    sp500_data = data.iloc[:, 0]
             except:
                 # Last resort - use first column of data
                 sp500_data = data.iloc[:, 0]

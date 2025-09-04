@@ -1,383 +1,594 @@
 """
-MPT-Based Portfolio Optimizer - Standalone Application
-Modern Portfolio Theory meets Systematic Investment Plans
+Modern Portfolio Theory (MPT) Optimizer - Commercial PoC
+A professional portfolio optimization tool using Modern Portfolio Theory
 """
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import numpy as np
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-# Import modules with corrected paths
-from config.settings import get_cached_rates, refresh_exchange_rates, APP_CONFIG
+# Import modules
 from models.sip_strategy import SIPStrategyAnalyzer
-from ui.simplified_components import SimplifiedInputManager, SimplifiedDisplayManager
-from ui.sip_components import SIPAnalysisManager
-from utils.excel_export import ExcelExportManager, create_financial_summary_from_session
+from ui.mpt_components import MPTInterface
+from utils.excel_export import ExcelExportManager
 
 def main():
-    """Main application function focused on MPT-based SIP optimization."""
+    """Main application function for MPT portfolio optimization."""
     
     # Page configuration
     st.set_page_config(
-        page_title="MPT-Based SIP Optimizer",
-        page_icon="🎯",
-        layout="wide"
+        page_title="MPT Portfolio Optimizer",
+        page_icon="📊",
+        layout="wide",
+        initial_sidebar_state="expanded"
     )
     
-    st.title("🎯 MPT-Based SIP Portfolio Optimizer")
+    # Header
+    st.title("📊 Modern Portfolio Theory Optimizer")
     st.markdown("""
-    **Modern Portfolio Theory meets Systematic Investment Plans**
+    **Professional Portfolio Optimization Tool**
     
-    This app helps you optimize your monthly investments using advanced mathematical models while keeping local investments separate.
+    Optimize your investment portfolio using advanced mathematical models based on Modern Portfolio Theory.
+    Build efficient portfolios that maximize returns for a given level of risk.
     """)
     
-    # Exchange rates section
+    # Tab selection using radio buttons for better control
+    st.markdown("### Choose Your Analysis Type:")
+    
+    selected_tab = st.radio(
+        "Select analysis type:",
+        options=["🎯 Portfolio Optimization", "📊 Portfolio Composition Analysis"],
+        index=0,
+        horizontal=True,
+        key="selected_tab",
+        label_visibility="collapsed"
+    )
+    
+    # Update active tab in session state
+    if "🎯 Portfolio Optimization" in selected_tab:
+        st.session_state.active_tab = 'optimization'
+    else:
+        st.session_state.active_tab = 'composition'
+    
+    # Create dynamic sidebar based on active tab
+    render_dynamic_sidebar()
+    
     st.markdown("---")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.subheader("💱 Exchange Rates")
-    with col2:
-        if st.button("🔄 Refresh Rates"):
-            exchange_rates = refresh_exchange_rates()
-            st.success("Rates updated!")
+    
+    # Render content based on selected tab
+    if st.session_state.active_tab == 'optimization':
+        render_portfolio_optimization_content()
+    else:
+        render_portfolio_composition_content()
+
+def render_dynamic_sidebar():
+    """Render sidebar content based on active tab."""
+    
+    # Determine which tab content to show
+    active_tab = st.session_state.get('active_tab', 'optimization')
+    
+    with st.sidebar:
+        if active_tab == 'optimization':
+            render_optimization_sidebar()
         else:
-            exchange_rates = get_cached_rates()
+            render_composition_sidebar()
+
+def render_optimization_sidebar():
+    """Render sidebar for portfolio optimization."""
     
-    # Store exchange rates in session state for export
-    st.session_state.exchange_rates = exchange_rates
+    st.header("🎯 Portfolio Configuration")
+    st.caption("⚡ Active: Portfolio Optimization")
     
-    # Display current rates
-    if hasattr(st.session_state, 'rates_last_updated'):
-        st.caption(f"Last updated: {st.session_state.rates_last_updated.strftime('%Y-%m-%d %H:%M:%S')}")
+    # Investment amount
+    investment_amount = st.number_input(
+        "Monthly Investment Amount ($)",
+        min_value=100,
+        max_value=100000,
+        value=5000,
+        step=100,
+        key="opt_investment_amount",
+        help="Amount to invest monthly in your portfolio"
+    )
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("USD/PKR", f"{exchange_rates['usd_pkr_rate']:.2f}")
-    with col2:
-        st.metric("USDT/USD", f"{exchange_rates['usdt_usd_rate']:.4f}")
-    with col3:
-        st.metric("GBP/USD", f"{exchange_rates['gbp_usd_rate']:.4f}")
+    # Asset selection
+    st.subheader("📈 Asset Selection")
     
-    st.markdown("---")
+    # Asset categories
+    asset_categories = get_asset_categories()
     
-    # Step 1: Income Setup
-    total_income, usd_pkr_rate = SimplifiedInputManager.render_income_and_pkr_expenses(exchange_rates)
+    # Initialize session state for asset selections if not exists
+    if 'asset_selections' not in st.session_state:
+        st.session_state.asset_selections = {}
     
-    # Store in session state for export
-    st.session_state.total_income = total_income
-    st.session_state.usd_pkr_rate = usd_pkr_rate
-    
-    st.markdown("---")
-    
-    # Step 2: Configure PKR Expenses
-    pkr_expenses_usd = SimplifiedInputManager.render_configurable_pkr_expenses(usd_pkr_rate)
-    
-    # Store in session state for export
-    st.session_state.pkr_expenses_usd = pkr_expenses_usd
-    
-    st.markdown("---")
-    
-    # Step 3: Investment Allocation
-    available_usd, international_amount, local_amount, cash_amount = SimplifiedInputManager.render_investment_allocation_inputs(total_income, pkr_expenses_usd)
-    
-    # Store in session state for export
-    st.session_state.available_usd = available_usd
-    st.session_state.international_amount = international_amount
-    st.session_state.local_amount = local_amount
-    st.session_state.cash_amount = cash_amount
-    
-    if available_usd <= 0:
-        st.error("Cannot proceed without available investment funds.")
-        return
-    
-    st.markdown("---")
-    
-    # Step 4: Local allocation guide
-    SimplifiedDisplayManager.render_local_allocation_guide(local_amount)
-    
-    st.markdown("---")
-    
-    # Step 5: MPT Optimization (only if international amount > 0)
-    if international_amount > 0:
-        st.header("🧠 Modern Portfolio Theory Optimization")
-        st.markdown(f"""
-        **Monthly Amount for MPT Optimization: ${international_amount:,.0f}**
-        
-        This section will optimize your international investments using advanced mathematical models:
-        - **Max Sharpe Ratio**: Maximizes return per unit of risk
-        - **Min Variance**: Minimizes portfolio volatility
-        - **Dynamic Rebalancing**: Tests different rebalancing frequencies
-        - **Market Regime Awareness**: Adapts to bull/bear markets
-        """)
-        
-        # MPT Configuration
-        selected_assets, rebalancing_strategies = SimplifiedInputManager.render_mpt_configuration()
-        
-        # Custom allocation input
-        st.markdown("---")
-        custom_allocation = SimplifiedInputManager.render_custom_allocation_input(selected_assets)
-        
-        if len(selected_assets) >= 2 and rebalancing_strategies:
-            # SIP Analysis Configuration
-            st.subheader("📅 Analysis Configuration")
+    # Asset selection interface with select all buttons
+    for category, assets in asset_categories.items():
+        with st.expander(category):
+            # Select All / Deselect All buttons
+            col1, col2 = st.columns([1, 1])
             
-            col1, col2 = st.columns(2)
+    with col1:
+                if st.button(f"✅ Select All", key=f"opt_select_all_{category}"):
+                    for ticker in assets.keys():
+                        st.session_state.asset_selections[ticker] = True
+                    st.rerun()
+            
+    with col2:
+                if st.button(f"❌ Deselect All", key=f"opt_deselect_all_{category}"):
+                    for ticker in assets.keys():
+                        st.session_state.asset_selections[ticker] = False
+                    st.rerun()
+    
+    st.markdown("---")
+    
+            # Individual asset checkboxes
+            for ticker, name in assets.items():
+                current_state = st.session_state.asset_selections.get(ticker, False)
+                if st.checkbox(f"{ticker} - {name}", value=current_state, key=f"opt_checkbox_{ticker}"):
+                    st.session_state.asset_selections[ticker] = True
+                else:
+                    st.session_state.asset_selections[ticker] = False
+    
+    # Optimization settings
+    st.subheader("⚙️ Optimization Settings")
+    
+    optimization_methods = st.multiselect(
+        "Optimization Methods",
+        options=["Max Sharpe Ratio", "Min Variance", "Equal Weight"],
+        default=["Max Sharpe Ratio", "Min Variance"],
+        key="opt_methods",
+        help="Select optimization strategies to compare"
+    )
+    
+    rebalancing_frequencies = st.multiselect(
+        "Rebalancing Frequencies",
+        options=["3 Months", "6 Months", "12 Months", "Static"],
+        default=["6 Months", "12 Months"],
+        key="opt_frequencies",
+        help="How often to rebalance the portfolio"
+    )
+    
+    # Rebalancing strategy selection
+    st.subheader("🔄 Rebalancing Strategy")
+    
+    rebalancing_strategy = st.radio(
+        "Choose your rebalancing approach:",
+        options=[
+            "Both Strategies (Recommended)", 
+            "Keep Holdings + Add New (Conservative)",
+            "Sell & Reinvest All (Aggressive)"
+        ],
+        index=0,
+        key="opt_rebalancing_strategy",
+        help="Conservative: Keep existing holdings, only optimize new contributions. Aggressive: Sell everything and reinvest optimally."
+    )
+    
+    st.caption("💡 **Conservative**: Lower transaction costs, tax-efficient. **Aggressive**: Higher transaction costs but fully optimal allocation.")
+    
+    # Analysis period
+    st.subheader("📅 Analysis Period")
+    
+    period_options = {
+        "Last 1 Year": 1,
+        "Last 2 Years": 2,
+        "Last 3 Years": 3,
+        "Last 5 Years": 5,
+        "Last 10 Years": 10,
+        "Maximum Available": 15
+    }
+    
+    selected_period = st.selectbox(
+        "Time Period",
+        options=list(period_options.keys()),
+        index=2,  # Default to 3 years
+        key="opt_period",
+        help="Historical period for backtesting"
+    )
+
+def render_composition_sidebar():
+    """Render sidebar for portfolio composition analysis."""
+    
+    st.header("📊 Composition Analysis Settings")
+    st.caption("⚡ Active: Portfolio Composition Analysis")
+    
+    # Investment amount for composition analysis
+    composition_amount = st.number_input(
+        "Monthly Investment Amount ($)",
+        min_value=100,
+        max_value=100000,
+        value=5000,
+        step=100,
+        key="comp_investment_amount",
+        help="Amount invested monthly in the analysis"
+    )
+    
+    # Asset selection for composition analysis
+    st.subheader("📈 Select Assets for Analysis")
+    
+    # Same asset categories but with different keys
+    asset_categories = get_asset_categories()
+    
+    # Initialize session state for composition asset selections
+    if 'composition_asset_selections' not in st.session_state:
+        st.session_state.composition_asset_selections = {}
+    
+    # Asset selection interface for composition analysis
+    for category, assets in asset_categories.items():
+        with st.expander(category):
+            # Select All / Deselect All buttons for composition
+            col1, col2 = st.columns([1, 1])
             
             with col1:
-                st.markdown("**📅 Analysis Period**")
-                
-                # Date range presets
-                preset_option = st.selectbox(
-                    "Choose time period:",
-                    options=[
-                        "Custom Range",
-                        "Last 1 Year", 
-                        "Last 2 Years",
-                        "Last 3 Years", 
-                        "Last 5 Years",
-                        "Last 10 Years",
-                        "Maximum Available (2015-Present)"
-                    ],
-                    index=2  # Default to "Last 3 Years"
-                )
-                
-                # Calculate dates based on preset
-                end_date = datetime.now()
-                if preset_option == "Last 1 Year":
-                    start_date = end_date - pd.DateOffset(years=1)
-                elif preset_option == "Last 2 Years":
-                    start_date = end_date - pd.DateOffset(years=2)
-                elif preset_option == "Last 3 Years":
-                    start_date = end_date - pd.DateOffset(years=3)
-                elif preset_option == "Last 5 Years":
-                    start_date = end_date - pd.DateOffset(years=5)
-                elif preset_option == "Last 10 Years":
-                    start_date = end_date - pd.DateOffset(years=10)
-                elif preset_option == "Maximum Available (2015-Present)":
-                    start_date = datetime(2015, 1, 1)
-                else:  # Custom Range
-                    start_date = datetime(2020, 1, 1)
-                
-                # Show custom date picker only if "Custom Range" is selected
-                if preset_option == "Custom Range":
-                    date_range = st.date_input(
-                        "Select custom date range:",
-                        value=(start_date.date(), end_date.date()),
-                        min_value=datetime(2015, 1, 1).date(),
-                        max_value=end_date.date()
-                    )
-                    
-                    if len(date_range) == 2:
-                        start_date_str = date_range[0].strftime('%Y-%m-%d')
-                        end_date_str = date_range[1].strftime('%Y-%m-%d')
-                    else:
-                        start_date_str = start_date.strftime('%Y-%m-%d')
-                        end_date_str = end_date.strftime('%Y-%m-%d')
-                else:
-                    start_date_str = start_date.strftime('%Y-%m-%d')
-                    end_date_str = end_date.strftime('%Y-%m-%d')
-                    st.info(f"📊 **Analysis Period**: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+                if st.button(f"✅ Select All", key=f"comp_select_all_{category}"):
+                    for ticker in assets.keys():
+                        st.session_state.composition_asset_selections[ticker] = True
+                    st.rerun()
             
             with col2:
-                st.markdown("**📊 Analysis Features**")
-                st.info("**🚀 Enhanced Analysis**: Both rebalancing approaches will be tested simultaneously for complete comparison!")
-                
-                st.markdown("**Rebalancing Strategies Included:**")
-                st.markdown("• **🟢 New Contrib**: Existing holdings stay, only new contributions optimized")
-                st.markdown("• **🔴 Full Rebal**: Entire portfolio rebalanced (higher transaction costs)")
-                
-                st.markdown("**Other Features:**")
-                st.markdown("• Historical backtesting")
-                st.markdown("• Risk-adjusted optimization") 
-                st.markdown("• Transaction cost modeling (0.25% per rebalance)")
-                st.markdown("• Interactive filtering in results")
-                
-                st.caption("💡 **Transaction Costs**: Includes bid-ask spreads, market impact, and rebalancing overhead. Most major brokerages offer commission-free ETF trading.")
+                if st.button(f"❌ Deselect All", key=f"comp_deselect_all_{category}"):
+                    for ticker in assets.keys():
+                        st.session_state.composition_asset_selections[ticker] = False
+                    st.rerun()
             
-            # Analysis Button
+            st.markdown("---")
+            
+            # Individual asset checkboxes for composition
+            for ticker, name in assets.items():
+                current_state = st.session_state.composition_asset_selections.get(ticker, False)
+                if st.checkbox(f"{ticker} - {name}", value=current_state, key=f"comp_checkbox_{ticker}"):
+                    st.session_state.composition_asset_selections[ticker] = True
+                else:
+                    st.session_state.composition_asset_selections[ticker] = False
+    
+    # Note: Strategy selection moved to main content area for better UX
+
+def get_asset_categories():
+    """Get the standard asset categories."""
+    return {
+        "🇺🇸 US Equity ETFs": {
+            'VOO': 'S&P 500 ETF',
+            'QQQ': 'Nasdaq 100 ETF', 
+            'VTI': 'Total US Market ETF',
+            'IWM': 'Russell 2000 ETF',
+            'ARKK': 'Innovation ETF'
+        },
+        "🌍 International ETFs": {
+            'VWO': 'Emerging Markets ETF',
+            'VEA': 'Developed Markets ETF',
+            'VXUS': 'Total International ETF',
+            'EFA': 'EAFE ETF',
+            'VGK': 'European ETF'
+        },
+        "🏛️ Bonds & Fixed Income": {
+            'BND': 'Total Bond Market ETF',
+            'TLT': 'Long-Term Treasury ETF',
+            'SHY': 'Short-Term Treasury ETF',
+            'LQD': 'Investment Grade Corporate',
+            'HYG': 'High Yield Corporate'
+        },
+        "₿ Cryptocurrency": {
+            'BTC-USD': 'Bitcoin',
+            'ETH-USD': 'Ethereum',
+            'ADA-USD': 'Cardano',
+            'SOL-USD': 'Solana'
+        },
+        "🏭 Sector ETFs": {
+            'XLK': 'Technology Sector',
+            'XLF': 'Financial Sector',
+            'XLV': 'Healthcare Sector',
+            'XLE': 'Energy Sector',
+            'XLI': 'Industrial Sector'
+        },
+        "🥇 Commodities & REITs": {
+            'GLD': 'Gold ETF',
+            'SLV': 'Silver ETF',
+            'VNQ': 'Real Estate ETF',
+            'USO': 'Oil ETF',
+            'DBA': 'Agriculture ETF'
+        }
+    }
+
+def render_portfolio_optimization_content():
+    """Render the main content for portfolio optimization tab."""
+    
+    # Get selected assets
+    selected_assets = []
+    for ticker, is_selected in st.session_state.get('asset_selections', {}).items():
+        if is_selected:
+            selected_assets.append(ticker)
+    
+    # Get settings from sidebar
+    investment_amount = st.session_state.get('opt_investment_amount', 5000)
+    optimization_methods = st.session_state.get('opt_methods', [])
+    rebalancing_frequencies = st.session_state.get('opt_frequencies', [])
+    rebalancing_strategy = st.session_state.get('opt_rebalancing_strategy', "Both Strategies (Recommended)")
+    selected_period = st.session_state.get('opt_period', "Last 3 Years")
+    
+    # Calculate dates
+                end_date = datetime.now()
+    period_options = {
+        "Last 1 Year": 1, "Last 2 Years": 2, "Last 3 Years": 3,
+        "Last 5 Years": 5, "Last 10 Years": 10, "Maximum Available": 15
+    }
+    years_back = period_options.get(selected_period, 3)
+    if selected_period == "Maximum Available":
+                    start_date = datetime(2015, 1, 1)
+    else:
+        start_date = end_date - timedelta(days=years_back * 365)
+    
+    # Main content area
+    if len(selected_assets) < 2:
+        st.warning("⚠️ Please select at least 2 assets from the sidebar to begin optimization.")
+        
+        # Show sample portfolio for demonstration
+        st.subheader("📊 Sample Portfolio Analysis")
+        st.info("Here's what the analysis would look like with a sample portfolio:")
+        
+        demo_assets = ['VOO', 'VWO', 'BND', 'GLD']
+        demo_config = {
+            'tickers': demo_assets,
+            'sip_amount': investment_amount,
+            'transaction_cost_rate': 0.0025
+        }
+        
+        if st.button("🚀 Run Demo Analysis"):
+            # Use default settings for demo if none selected
+            demo_methods = optimization_methods if optimization_methods else ["Max Sharpe Ratio", "Min Variance"]
+            demo_frequencies = rebalancing_frequencies if rebalancing_frequencies else ["6 Months"]
+            
+            run_portfolio_analysis(demo_config, start_date.strftime('%Y-%m-%d'), 
+                                 end_date.strftime('%Y-%m-%d'), demo_methods, 
+                                 demo_frequencies, "Both Strategies (Recommended)", is_demo=True)
+    
+    elif not optimization_methods or not rebalancing_frequencies:
+        st.warning("⚠️ Please select at least one optimization method and rebalancing frequency.")
+    
+    else:
+        # Show selected configuration
+        st.subheader("🎯 Portfolio Configuration")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Monthly Investment", f"${investment_amount:,}")
+            
+            with col2:
+            st.metric("Selected Assets", len(selected_assets))
+        
+        with col3:
+            st.metric("Analysis Period", selected_period)
+        
+        # Display selected assets
+        with st.expander("📋 Selected Assets", expanded=True):
+            asset_categories = get_asset_categories()
+            asset_df = pd.DataFrame({
+                'Ticker': selected_assets,
+                'Asset Type': [get_asset_type(asset, asset_categories) for asset in selected_assets]
+            })
+            st.dataframe(asset_df, hide_index=True)
+        
+        # Run analysis button
+        st.markdown("---")
+        
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                if st.button("🚀 Run MPT Analysis", type="primary"):
-                    run_mpt_analysis(
-                        selected_assets, 
-                        rebalancing_strategies, 
-                        international_amount, 
-                        start_date_str, 
-                        end_date_str,
-                        custom_allocation
+            if st.button("🚀 Optimize Portfolio", type="primary", use_container_width=True):
+                config = {
+                    'tickers': selected_assets,
+                    'sip_amount': investment_amount,
+                    'transaction_cost_rate': 0.0025
+                }
+                
+                run_portfolio_analysis(
+                    config, 
+                    start_date.strftime('%Y-%m-%d'), 
+                    end_date.strftime('%Y-%m-%d'),
+                    optimization_methods,
+                    rebalancing_frequencies,
+                    rebalancing_strategy
                     )
             
             # Display results if available
-            if st.session_state.get('mpt_analysis_results'):
-                display_mpt_results(international_amount)
+        if st.session_state.get('analysis_results'):
+            display_analysis_results()
+
+def render_portfolio_composition_content():
+    """Render the main content for portfolio composition analysis tab."""
+    
+    st.markdown("### 📊 Portfolio Composition Analysis")
+    st.markdown("Analyze how your portfolio would have grown with different strategies and time periods.")
+    
+    # Get selected assets for composition
+    composition_assets = []
+    for ticker, is_selected in st.session_state.get('composition_asset_selections', {}).items():
+        if is_selected:
+            composition_assets.append(ticker)
+    
+    # Get settings from sidebar
+    composition_amount = st.session_state.get('comp_investment_amount', 5000)
+    
+    # Main composition analysis interface
+    if len(composition_assets) < 1:
+        st.warning("⚠️ Please select at least 1 asset from the sidebar to begin analysis.")
+        st.info("💡 You can select entire categories using the 'Select All' buttons.")
         
-        else:
-            st.warning("⚠️ Please select at least 2 assets and 1 rebalancing strategy to run analysis.")
+        # Show popular combinations as suggestions
+        st.subheader("🎯 Popular Portfolio Combinations")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📈 Growth Portfolio", key="growth_portfolio"):
+                growth_assets = ['VOO', 'QQQ', 'VWO', 'ARKK']
+                for asset in growth_assets:
+                    st.session_state.composition_asset_selections[asset] = True
+                st.rerun()
+            st.caption("VOO, QQQ, VWO, ARKK")
+        
+        with col2:
+            if st.button("⚖️ Balanced Portfolio", key="balanced_portfolio"):
+                balanced_assets = ['VOO', 'VWO', 'BND', 'GLD']
+                for asset in balanced_assets:
+                    st.session_state.composition_asset_selections[asset] = True
+                st.rerun()
+            st.caption("VOO, VWO, BND, GLD")
+        
+        with col3:
+            if st.button("🛡️ Conservative Portfolio", key="conservative_portfolio"):
+                conservative_assets = ['VOO', 'BND', 'SHY', 'GLD']
+                for asset in conservative_assets:
+                    st.session_state.composition_asset_selections[asset] = True
+                st.rerun()
+            st.caption("VOO, BND, SHY, GLD")
     
     else:
-        st.info("💡 No funds allocated to international markets. Increase international allocation to run MPT analysis.")
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    **📝 Key Features:**
-    - ✅ **Configurable PKR expenses** - Perfect for sharing with different users
-    - ✅ **Ticker validation** - Automatically handles unavailable securities
-    - ✅ **MPT optimization** - Mathematically optimal allocations
-    - ✅ **Custom allocation testing** - Compare your strategy vs optimal
-    - ✅ **Interactive charts** - Comprehensive performance visualization
-    - ✅ **Export functionality** - Download results for implementation
-    """)
+        # Show selected configuration
+        st.subheader("🎯 Analysis Configuration")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Monthly Investment", f"${composition_amount:,}")
+        
+        with col2:
+            st.metric("Selected Assets", len(composition_assets))
+        
+        with col3:
+            st.metric("Available Strategies", "12 Total")
+        
+        # Display selected assets
+        with st.expander("📋 Selected Assets", expanded=False):
+            asset_categories = get_asset_categories()
+            asset_df = pd.DataFrame({
+                'Ticker': composition_assets,
+                'Asset Type': [get_asset_type(asset, asset_categories) for asset in composition_assets]
+            })
+            st.dataframe(asset_df, hide_index=True)
+        
+        # Time period and strategy selection for analysis
+        st.subheader("📅 Analysis Parameters")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            time_periods = {
+                "6 Months": 0.5,
+                "1 Year": 1,
+                "2 Years": 2,
+                "3 Years": 3,
+                "5 Years": 5
+            }
+            
+            selected_period = st.selectbox(
+                "SIP Start Period",
+                options=list(time_periods.keys()),
+                index=2,
+                key="comp_period",
+                help="How long ago you would have started SIP"
+            )
+        
+        with col2:
+            # Build all available strategies (no need for sidebar selection)
+            all_strategies = []
+            
+            methods = ["Max Sharpe Ratio", "Min Variance", "Equal Weight"]
+            frequencies = ["6 Months", "12 Months"]
+            rebalancing_approaches = ["Conservative", "Aggressive"]
+            
+            for method in methods:
+                for freq in frequencies:
+                    for rebal in rebalancing_approaches:
+                        if method == "Equal Weight":
+                            all_strategies.append(f"Equal Weight ({freq}) - {rebal}")
+                        elif method == "Max Sharpe Ratio":
+                            all_strategies.append(f"Max Sharpe ({freq}) - {rebal}")
+                        elif method == "Min Variance":
+                            all_strategies.append(f"Min Variance ({freq}) - {rebal}")
+            
+            selected_strategy = st.selectbox(
+                "Strategy to Analyze",
+                options=all_strategies,
+                index=0,
+                key="comp_strategy",
+                help="Choose which strategy to analyze in detail"
+            )
+        
+        with col3:
+            st.write("") # Spacer
+            if st.button("🔍 Analyze Portfolio Composition", type="primary", use_container_width=True):
+                # Create independent analysis
+                composition_config = {
+                    'tickers': composition_assets,
+                    'sip_amount': composition_amount,
+                    'transaction_cost_rate': 0.0025
+                }
+                
+                # Create mock analysis results for composition analysis
+                MPTInterface._generate_composition_analysis(
+                    {'config': composition_config}, 
+                    selected_strategy, 
+                    time_periods[selected_period]
+                )
+        
+        # Display composition results if available
+        if st.session_state.get('composition_analysis'):
+            st.markdown("---")
+            MPTInterface._display_composition_results()
 
-def run_mpt_analysis(selected_assets: List[str], rebalancing_strategies: Dict[str, int], 
-                    sip_amount: float, start_date: str, end_date: str, custom_allocation: Optional[Dict[str, float]] = None):
-    """Run MPT analysis on selected assets with optional custom allocation."""
+def get_asset_type(ticker: str, asset_categories: Dict) -> str:
+    """Get the category/type of an asset."""
+    for category, assets in asset_categories.items():
+        if ticker in assets:
+            return category.replace("🇺🇸 ", "").replace("🌍 ", "").replace("🏛️ ", "").replace("₿ ", "").replace("🏭 ", "").replace("🥇 ", "")
+    return "Custom"
+
+def run_portfolio_analysis(config: Dict, start_date: str, end_date: str, 
+                         optimization_methods: List[str], rebalancing_frequencies: List[str],
+                         rebalancing_strategy: str = "Both Strategies (Recommended)", is_demo: bool = False):
+    """Run comprehensive portfolio analysis."""
     
-    # Configure analyzer with dynamic asset selection
-    sip_config = {
-        'tickers': selected_assets,  # Use dynamically selected assets
-        'sip_amount': sip_amount,  # Use international amount only
-        'transaction_cost_rate': 0.0025  # 0.25% - more realistic for bid-ask spreads + rebalancing costs
-    }
+    analyzer = SIPStrategyAnalyzer(config)
     
-    # Always create new analyzer with current asset selection
-    # (since assets can change dynamically)
-    analyzer = SIPStrategyAnalyzer(sip_config)
-    
-    # Cache the analyzer for the session
-    st.session_state.mpt_analyzer = analyzer
-    
-    with st.spinner("🔄 Running MPT analysis... This may take a few minutes."):
+    with st.spinner("🔄 Optimizing portfolio... This may take a few minutes."):
         try:
             progress_bar = st.progress(0)
-            st.caption(f"🎯 Analyzing {len(selected_assets)} assets with ${sip_amount:,.0f}/month")
             
-            # Validate tickers first
-            st.caption("🔍 Validating ticker availability...")
-            valid_tickers, invalid_tickers = analyzer.validate_tickers(selected_assets)
+            if is_demo:
+                st.info("🎭 Running demo analysis with sample portfolio (VOO, VWO, BND, GLD)")
+            
+            # Validate tickers
+            valid_tickers, invalid_tickers = analyzer.validate_tickers(config['tickers'])
             
             if invalid_tickers:
-                st.warning(f"⚠️ {len(invalid_tickers)} tickers are not available: {', '.join(invalid_tickers)}")
-                st.info(f"✅ Continuing analysis with {len(valid_tickers)} valid tickers: {', '.join(valid_tickers)}")
+                st.warning(f"⚠️ {len(invalid_tickers)} assets unavailable: {', '.join(invalid_tickers)}")
             
             if len(valid_tickers) < 2:
-                st.error("❌ Need at least 2 valid tickers for analysis. Please select different assets.")
+                st.error("❌ Need at least 2 valid assets for optimization.")
                 return
             
-            # Update analyzer with valid tickers only
+            # Update analyzer with valid tickers
             analyzer.available_tickers = valid_tickers
-            selected_assets = valid_tickers  # Use only valid tickers
-            
             progress_bar.progress(20)
             
-            # Build strategies based on user selection - ALWAYS test both rebalancing approaches
-            strategies_to_test = []
-            
-            for strategy_name, months in rebalancing_strategies.items():
-                if "Static" in strategy_name:
-                    # Add both rebalancing approaches for Static Equal Weight
-                    strategies_to_test.extend([
-                        {
-                            'name': f'Static Equal Weight (New Contrib)',
-                            'rebalance_months': months,
-                            'method': 'equal_weight',
-                            'full_rebalancing': False
-                        },
-                        {
-                            'name': f'Static Equal Weight (Full Rebal)',
-                            'rebalance_months': months,
-                            'method': 'equal_weight',
-                            'full_rebalancing': True
-                        }
-                    ])
-                else:
-                    # Add both Max Sharpe and Min Variance for each frequency, with both rebalancing approaches
-                    strategies_to_test.extend([
-                        # New Contrib versions
-                        {
-                            'name': f'Max Sharpe ({months}M) (New Contrib)',
-                            'rebalance_months': months,
-                            'method': 'max_sharpe',
-                            'full_rebalancing': False
-                        },
-                        {
-                            'name': f'Min Variance ({months}M) (New Contrib)',
-                            'rebalance_months': months,
-                            'method': 'min_variance',
-                            'full_rebalancing': False
-                        },
-                        # Full Rebal versions
-                        {
-                            'name': f'Max Sharpe ({months}M) (Full Rebal)',
-                            'rebalance_months': months,
-                            'method': 'max_sharpe',
-                            'full_rebalancing': True
-                        },
-                        {
-                            'name': f'Min Variance ({months}M) (Full Rebal)',
-                            'rebalance_months': months,
-                            'method': 'min_variance',
-                            'full_rebalancing': True
-                        }
-                    ])
-            
-            st.caption(f"Testing {len(strategies_to_test)} strategies...")
+            # Download data
+            data = analyzer.download_data(start_date, end_date)
             progress_bar.progress(40)
             
-            # Run analysis
-            data = analyzer.download_data(start_date, end_date)
+            # Build strategies
+            strategies = build_strategies(optimization_methods, rebalancing_frequencies, rebalancing_strategy)
             progress_bar.progress(60)
             
+            # Run backtests
             results = {}
-            
-            # Backtest strategies
-            for strategy in strategies_to_test:
+            for strategy in strategies:
                 if strategy['method'] == 'equal_weight':
                     results[strategy['name']] = analyzer.backtest_equal_weight(data)
                 else:
                     results[strategy['name']] = analyzer.backtest_strategy(data, strategy)
             
-            # Add custom allocation if provided
-            if custom_allocation:
-                # Convert custom allocation to format expected by backtest_user_allocation
-                custom_formatted = {}
-                asset_names = {
-                    # US Equity ETFs
-                    'VOO': 'VOO (S&P 500)', 'QQQ': 'QQQ (Nasdaq 100)', 'VTI': 'VTI (Total US Market)',
-                    'IWM': 'IWM (Russell 2000)', 'ARKK': 'ARKK (Innovation)',
-                    # International ETFs
-                    'VWO': 'VWO (Emerging Markets)', 'VEA': 'VEA (Developed Markets)', 
-                    'VXUS': 'VXUS (Total International)', 'EFA': 'EFA (EAFE)', 'VGK': 'VGK (European)',
-                    # Bonds & Fixed Income
-                    'BND': 'BND (Total Bond Market)', 'TLT': 'TLT (Long-Term Treasury)',
-                    'SHY': 'SHY (Short-Term Treasury)', 'LQD': 'LQD (Investment Grade Corp)',
-                    'HYG': 'HYG (High Yield Corp)',
-                    # Cryptocurrency
-                    'BTC-USD': 'Bitcoin (BTC)', 'ETH-USD': 'Ethereum (ETH)',
-                    'ADA-USD': 'Cardano (ADA)', 'SOL-USD': 'Solana (SOL)',
-                    # Sector ETFs
-                    'XLK': 'XLK (Technology)', 'XLF': 'XLF (Financial)', 'XLV': 'XLV (Healthcare)',
-                    'XLE': 'XLE (Energy)', 'XLI': 'XLI (Industrial)',
-                    # Commodities & REITs
-                    'GLD': 'GLD (Gold)', 'SLV': 'SLV (Silver)', 'VNQ': 'VNQ (Real Estate)',
-                    'USO': 'USO (Oil)', 'DBA': 'DBA (Agriculture)'
-                }
-                
-                # Add custom assets if they exist
-                if 'custom_assets' in st.session_state:
-                    for ticker, name in st.session_state.custom_assets.items():
-                        asset_names[ticker] = f"{ticker} ({name})"
-                
-                for asset, percentage in custom_allocation.items():
-                    formatted_name = asset_names.get(asset, asset)
-                    custom_formatted[formatted_name] = percentage
-                
-                results['Your Custom Allocation'] = analyzer.backtest_user_allocation(data, custom_formatted)
-            
-            # Add S&P 500 benchmark
+            # Add benchmark
             results['S&P 500 Benchmark'] = analyzer.backtest_benchmark(data)
-            
             progress_bar.progress(80)
             
             # Calculate performance metrics
@@ -389,274 +600,101 @@ def run_mpt_analysis(selected_assets: List[str], rebalancing_strategies: Dict[st
                 )
                 performance_summary[name] = metrics
             
-            progress_bar.progress(90)
-            
-            # Create charts
+            # Create analysis results
             analysis_results = {
                 'results': results,
                 'performance_summary': performance_summary,
-                'data': data
+                'data': data,
+                'config': config
             }
             
+            # Create charts
             charts = analyzer.create_interactive_charts(analysis_results)
-            
             progress_bar.progress(100)
             
             # Store results
-            st.session_state.mpt_analysis_results = analysis_results
-            st.session_state.mpt_charts = charts
-            st.session_state.mpt_sip_amount = sip_amount
+            st.session_state.analysis_results = analysis_results
+            st.session_state.charts = charts
             
             progress_bar.empty()
-            st.success("✅ MPT Analysis completed successfully!")
+            st.success("✅ Portfolio optimization completed!")
             
         except Exception as e:
-            st.error(f"❌ Error running analysis: {str(e)}")
-            st.info("Please check your inputs and try again.")
+            st.error(f"❌ Error during analysis: {str(e)}")
 
-def display_mpt_results(sip_amount: float):
-    """Display MPT analysis results."""
+def build_strategies(optimization_methods: List[str], rebalancing_frequencies: List[str], 
+                   rebalancing_strategy: str = "Both Strategies (Recommended)") -> List[Dict]:
+    """Build strategy configurations from user selections."""
     
-    analysis_results = st.session_state.mpt_analysis_results
-    charts = st.session_state.mpt_charts
+    strategies = []
+    
+    # Map frequency names to months
+    freq_mapping = {
+        "3 Months": 3,
+        "6 Months": 6, 
+        "12 Months": 12,
+        "Static": 12
+    }
+    
+    # Determine which rebalancing approaches to test
+    if rebalancing_strategy == "Both Strategies (Recommended)":
+        rebalancing_approaches = [
+            ("Conservative", False),  # Keep holdings + add new
+            ("Aggressive", True)      # Sell & reinvest all
+        ]
+    elif rebalancing_strategy == "Keep Holdings + Add New (Conservative)":
+        rebalancing_approaches = [("Conservative", False)]
+    else:  # Sell & Reinvest All (Aggressive)
+        rebalancing_approaches = [("Aggressive", True)]
+    
+    for method in optimization_methods:
+        for freq in rebalancing_frequencies:
+            months = freq_mapping[freq]
+            
+            for approach_name, full_rebalancing in rebalancing_approaches:
+                if method == "Equal Weight":
+                    name = f'Equal Weight ({freq}) - {approach_name}'
+                    strategies.append({
+                        'name': name,
+                        'rebalance_months': months,
+                        'method': 'equal_weight',
+                        'full_rebalancing': full_rebalancing
+                    })
+                elif method == "Max Sharpe Ratio":
+                    name = f'Max Sharpe ({freq}) - {approach_name}'
+                    strategies.append({
+                        'name': name,
+                        'rebalance_months': months,
+                        'method': 'max_sharpe',
+                        'full_rebalancing': full_rebalancing
+                    })
+                elif method == "Min Variance":
+                    name = f'Min Variance ({freq}) - {approach_name}'
+                    strategies.append({
+                        'name': name,
+                        'rebalance_months': months,
+                        'method': 'min_variance',
+                        'full_rebalancing': full_rebalancing
+                    })
+    
+    return strategies
+
+def display_analysis_results():
+    """Display comprehensive analysis results."""
+    
+    analysis_results = st.session_state.analysis_results
+    charts = st.session_state.charts
     
     st.markdown("---")
-    st.header("📊 MPT Analysis Results")
+    st.header("📊 Portfolio Optimization Results")
     
-    # Performance summary
-    SIPAnalysisManager.render_analysis_results(analysis_results, sip_amount)
+    # Use the MPT interface to display results
+    MPTInterface.render_performance_summary(analysis_results)
+    MPTInterface.render_interactive_charts(charts)
+    MPTInterface.render_optimal_allocation(analysis_results)
     
-    # Interactive charts
-    SIPAnalysisManager.render_interactive_charts(charts)
-    
-    # Strategy recommendations
-    SIPAnalysisManager.render_strategy_recommendations(analysis_results)
-    
-    # Optimized allocation (only for international portion)
-    st.subheader("🎯 Optimal International Allocation")
-    
-    performance_summary = analysis_results['performance_summary']
-    valid_strategies = {name: metrics for name, metrics in performance_summary.items() 
-                       if not pd.isna(metrics['XIRR']) and not pd.isna(metrics['Volatility'])
-                       and 'Benchmark' not in name and 'Custom' not in name}
-    
-    if valid_strategies:
-        best_strategy = max(valid_strategies.items(), key=lambda x: x[1]['XIRR'])
-        best_strategy_name = best_strategy[0]
-        
-        st.success(f"**🏆 Best Strategy: {best_strategy_name}**")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Expected XIRR", f"{best_strategy[1]['XIRR']:.1%}")
-        with col2:
-            st.metric("Volatility", f"{best_strategy[1]['Volatility']:.1%}")
-        with col3:
-            st.metric("Sharpe Ratio", f"{best_strategy[1]['Sharpe Ratio']:.2f}")
-        
-        # Get the actual optimal allocation weights
-        analyzer = st.session_state.mpt_analyzer
-        data = analysis_results['data']
-        
-        # Determine the method based on strategy name
-        if "Min Variance" in best_strategy_name:
-            method = "min_variance"
-        elif "Max Sharpe" in best_strategy_name:
-            method = "max_sharpe"
-        else:
-            method = "min_variance"  # Default
-        
-        optimal_weights = analyzer.get_optimal_allocation_weights(data, method)
-        
-        if optimal_weights:
-            st.markdown("### 💰 **EXACT ALLOCATION RECOMMENDATIONS**")
-            st.markdown(f"*Based on ${sip_amount:,.0f}/month for international investments:*")
-            
-            # Create allocation table
-            allocation_data = []
-            asset_names = {
-                # US Equity ETFs
-                'VOO': 'S&P 500 ETF', 'QQQ': 'Nasdaq 100 ETF', 'VTI': 'Total US Market ETF',
-                'IWM': 'Russell 2000 ETF', 'ARKK': 'Innovation ETF',
-                # International ETFs
-                'VWO': 'Emerging Markets ETF', 'VEA': 'Developed Markets ETF', 
-                'VXUS': 'Total International ETF', 'EFA': 'EAFE ETF', 'VGK': 'European ETF',
-                # Bonds & Fixed Income
-                'BND': 'Total Bond Market ETF', 'TLT': 'Long-Term Treasury ETF',
-                'SHY': 'Short-Term Treasury ETF', 'LQD': 'Investment Grade Corporate Bonds',
-                'HYG': 'High Yield Corporate Bonds',
-                # Cryptocurrency
-                'BTC-USD': 'Bitcoin', 'ETH-USD': 'Ethereum',
-                'ADA-USD': 'Cardano', 'SOL-USD': 'Solana',
-                # Sector ETFs
-                'XLK': 'Technology Sector ETF', 'XLF': 'Financial Sector ETF', 'XLV': 'Healthcare Sector ETF',
-                'XLE': 'Energy Sector ETF', 'XLI': 'Industrial Sector ETF',
-                # Commodities & REITs
-                'GLD': 'Gold ETF', 'SLV': 'Silver ETF', 'VNQ': 'Real Estate ETF',
-                'USO': 'Oil ETF', 'DBA': 'Agriculture ETF'
-            }
-            
-            # Add custom assets if they exist
-            if 'custom_assets' in st.session_state:
-                for ticker, name in st.session_state.custom_assets.items():
-                    asset_names[ticker] = name
-            
-            for asset, weight in optimal_weights.items():
-                if weight > 0.001:  # Only show meaningful allocations
-                    monthly_amount = sip_amount * weight
-                    allocation_data.append({
-                        "Asset": f"{asset} ({asset_names.get(asset, asset)})",
-                        "Allocation %": f"{weight*100:.1f}%",
-                        "Monthly Amount": f"${monthly_amount:.0f}",
-                        "Annual Amount": f"${monthly_amount*12:,.0f}"
-                    })
-            
-            # Sort by allocation percentage (descending)
-            allocation_data.sort(key=lambda x: float(x["Allocation %"].replace('%', '')), reverse=True)
-            
-            allocation_df = pd.DataFrame(allocation_data)
-            st.dataframe(allocation_df, width='stretch', hide_index=True)
-            
-            # Summary
-            st.success(f"✅ **Total Monthly International Investment: ${sip_amount:,.0f}**")
-            
-            # Show comparison with custom allocation if provided
-            if 'Your Custom Allocation' in performance_summary:
-                custom_metrics = performance_summary['Your Custom Allocation']
-                best_metrics = best_strategy[1]
-                
-                st.markdown("### 📊 Your Custom vs Optimal Comparison")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**Your Custom Allocation:**")
-                    st.metric("XIRR", f"{custom_metrics['XIRR']:.1%}")
-                    st.metric("Volatility", f"{custom_metrics['Volatility']:.1%}")
-                    st.metric("Final Value", f"${custom_metrics['Final Value']:,.0f}")
-                
-                with col2:
-                    st.markdown("**Optimal MPT Allocation:**")
-                    st.metric("XIRR", f"{best_metrics['XIRR']:.1%}")
-                    st.metric("Volatility", f"{best_metrics['Volatility']:.1%}")
-                    st.metric("Final Value", f"${best_metrics['Final Value']:,.0f}")
-                
-                # Calculate improvement
-                improvement = best_metrics['Final Value'] - custom_metrics['Final Value']
-                improvement_pct = (improvement / custom_metrics['Final Value']) * 100
-                
-                if improvement > 0:
-                    st.success(f"🚀 **Potential Improvement: ${improvement:,.0f} ({improvement_pct:.1f}% better)**")
-                elif improvement < 0:
-                    st.info(f"💡 Your custom allocation is actually better by ${abs(improvement):,.0f}!")
-                else:
-                    st.info("🤝 Both strategies perform similarly!")
-        
-        else:
-            st.warning("⚠️ Could not calculate specific allocation weights. Using general recommendations.")
-        
-        # Show implementation guide
-        st.markdown("### 📋 Implementation Guide")
-        
-        if "Min Variance" in best_strategy_name:
-            st.info("""
-            **Min Variance Strategy Focus:**
-            - Emphasizes risk reduction while maintaining returns
-            - Balanced allocation across selected assets
-            - Lower volatility, steady growth approach
-            """)
-        elif "Max Sharpe" in best_strategy_name:
-            st.info("""
-            **Max Sharpe Strategy Focus:**
-            - Maximizes risk-adjusted returns
-            - May have higher concentration in top performers
-            - Optimal balance of risk and return
-            """)
-        else:
-            st.info("""
-            **Equal Weight Strategy:**
-            - Simple, balanced approach
-            - Equal exposure to all selected assets
-            - Easy to implement and maintain
-            """)
-        
-        # Rebalancing guidance
-        if "3M" in best_strategy_name:
-            st.warning("🔄 **Recommended**: Rebalance every 3 months for optimal performance")
-        elif "6M" in best_strategy_name:
-            st.success("🔄 **Recommended**: Rebalance every 6 months (balanced approach)")
-        elif "12M" in best_strategy_name:
-            st.info("🔄 **Recommended**: Rebalance annually (low maintenance)")
-        else:
-            st.info("🔄 **Static allocation**: No rebalancing needed")
-    
-    # Export functionality
-    if st.button("📥 Export Comprehensive Analysis (Excel)"):
-        # Get financial data from session state or calculate from current inputs
-        exchange_rates = st.session_state.get('exchange_rates', get_cached_rates())
-        
-        # Create financial summary (you might want to store these in session state)
-        financial_summary = create_financial_summary_from_session(
-            total_income=st.session_state.get('total_income', 0),
-            pkr_expenses_usd=st.session_state.get('pkr_expenses_usd', 0),
-            international_amount=st.session_state.get('international_amount', 0),
-            local_amount=st.session_state.get('local_amount', 0),
-            cash_amount=st.session_state.get('cash_amount', 0),
-            exchange_rates=exchange_rates
-        )
-        
-        # Get optimal allocation if available
-        optimal_allocation = None
-        if st.session_state.get('mpt_analyzer') and analysis_results:
-            analyzer = st.session_state.mpt_analyzer
-            data = analysis_results['data']
-            
-            # Find best strategy
-            performance_summary = analysis_results['performance_summary']
-            valid_strategies = {name: metrics for name, metrics in performance_summary.items() 
-                               if not pd.isna(metrics['XIRR']) and not pd.isna(metrics['Volatility'])
-                               and 'Benchmark' not in name and 'Custom' not in name}
-            
-            if valid_strategies:
-                best_strategy = max(valid_strategies.items(), key=lambda x: x[1]['XIRR'])
-                best_strategy_name = best_strategy[0]
-                
-                # Determine method
-                if "Min Variance" in best_strategy_name:
-                    method = "min_variance"
-                elif "Max Sharpe" in best_strategy_name:
-                    method = "max_sharpe"
-                else:
-                    method = "min_variance"
-                
-                optimal_allocation = analyzer.get_optimal_allocation_weights(data, method)
-        
-        # Create comprehensive report
-        excel_manager = ExcelExportManager()
-        file_data, filename, mime_type = excel_manager.create_comprehensive_report(
-            analysis_results=analysis_results,
-            financial_summary=financial_summary,
-            optimal_allocation=optimal_allocation,
-            sip_amount=sip_amount
-        )
-        
-        # Determine button label based on file type
-        if filename.endswith('.xlsx'):
-            button_label = "📊 Download Comprehensive Report (Excel)"
-            success_message = "✅ Excel report created with 4 detailed sheets!"
-        else:
-            button_label = "📊 Download Comprehensive Report (CSV)"
-            success_message = "✅ CSV report created (Excel libraries not available)"
-        
-        st.info(success_message)
-        
-        # Download button
-        st.download_button(
-            label=button_label,
-            data=file_data,
-            file_name=filename,
-            mime=mime_type
-        )
+    st.markdown("---")
+    MPTInterface.render_export_options(analysis_results)
 
 if __name__ == "__main__":
     main()
