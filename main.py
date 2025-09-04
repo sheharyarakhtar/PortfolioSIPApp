@@ -4,6 +4,7 @@ A professional portfolio optimization tool using Modern Portfolio Theory
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -42,6 +43,23 @@ def main():
             """
         }
     )
+    
+    # Google Analytics Configuration
+    GA_MEASUREMENT_ID = "G-L83CT8YSDN"
+    
+    GA_JS = f"""
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){{dataLayer.push(arguments);}}
+      gtag('js', new Date());
+      gtag('config', '{GA_MEASUREMENT_ID}');
+    </script>
+    """
+    
+    # Inject Google Analytics at the top of your app
+    components.html(GA_JS, height=0, width=0)
     
     # Inject custom meta tags for social media sharing
     st.markdown("""
@@ -178,8 +196,8 @@ def render_optimization_sidebar():
                         st.session_state.asset_selections[ticker] = False
                     st.rerun()
     
-            st.markdown("---")
-            
+    st.markdown("---")
+    
             # Individual asset checkboxes
             for ticker, name in assets.items():
                 current_state = st.session_state.asset_selections.get(ticker, False)
@@ -264,7 +282,7 @@ def render_optimization_sidebar():
     
     rebalancing_strategy = st.radio(
         "Choose your rebalancing approach:",
-        options=[
+                    options=[
             "Both Strategies (Recommended)", 
             "Keep Holdings + Add New (Conservative)",
             "Sell & Reinvest All (Aggressive)"
