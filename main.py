@@ -47,7 +47,8 @@ def main():
     # Google Analytics Configuration
     GA_MEASUREMENT_ID = "G-L83CT8YSDN"
     
-    GA_JS = f"""
+    # Inject Google Analytics directly into the main DOM
+    st.markdown(f"""
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id={GA_MEASUREMENT_ID}"></script>
     <script>
@@ -56,10 +57,7 @@ def main():
       gtag('js', new Date());
       gtag('config', '{GA_MEASUREMENT_ID}');
     </script>
-    """
-    
-    # Inject Google Analytics at the top of your app
-    components.html(GA_JS, height=0, width=0)
+    """, unsafe_allow_html=True)
     
     # Inject custom meta tags for social media sharing
     st.markdown("""
